@@ -13,6 +13,7 @@ import datetime
 # 优化了判断逻辑 对传入数据首先判断是否为原有的删除记录，若为新增记录 判断帐号是否存在
 # 在日志最后显示增加与删除的用户记录，并计数
 
+
 # 2021/2/10更新
 # 增加了从群组移除用户的计数器
 
@@ -88,12 +89,26 @@ def main():
     '''主函数
     '''
     # 连接tableau server
-    request_options = TSC.RequestOptions(pagesize=200)
+    request_options = TSC.RequestOptions(pagesize=300)
 
-    tableau_auth = TSC.TableauAuth('20040201', 'GT2020!qaz', site_id='')
+    tableau_auth = TSC.TableauAuth('20040201', 'GT@sh2021', site_id='')
     # tableau_auth = TSC.TableauAuth('GT_Account', 'GT2020123456', site_id='')
     # server = TSC.Server('https://fas-gt.com:8000', use_server_version=True)
     server = TSC.Server('https://tab.sucgm.com:10000', use_server_version=True)
+    # 目前Tableau Server版本2020.2 使用REST API v3.8
+    # server = TSC.Server('https://tab.sucgm.com:10000')
+    # server.version = '3.8'
+    # print(server.version)
+
+    # # 添加权限测试
+    # with server.auth.sign_in(tableau_auth):
+    #     all_workbooks_items, pagination_item = server.workbooks.get()
+    #     # print names of first 100 workbooks
+    #     print([workbook.name for workbook in all_workbooks_items])
+    #     print([workbook.id for workbook in all_workbooks_items])
+    #     work1=all_workbooks_items[0]
+    #     all_users, pagination_item = server.users.get(request_options)
+
 
     nowTime = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')  # 现在
     content = fwapi()
@@ -107,6 +122,7 @@ def main():
     f = open('user&pwd-' + nowTime + '.csv', 'w', encoding='utf-8', newline='' "")
     # 2. 基于文件对象构建 csv写入对象
     csv_writer = csv.writer(f)
+
 
     # 3. 构建列表头
     csv_writer.writerow(["Workcode", "Password"])
@@ -123,12 +139,14 @@ def main():
     quitgroupCount = 0
 
     # 系统账户（不可删除）
-    SystemUser = ['SHCJTS_Admin', '20040201', 'RPA_Account','A0496','A0910']
+    SystemUser = ['SHCJTS_Admin', '20040201', 'RPA_Account', 'A0496', 'A0910']
+    # 潘建先，张立亮为防疫报表权限 不属于泛微维护的权限范围内
 
     for info in infos:
-        # 遍历获取员工信息号和群组名称
+        # 遍历获取泛微协同门户员工信息号和群组名称
         workcode = info['workcode']
         # workcode = 'A0716'
+
         groupidnew = info['rolesmark']
         status = info['status']
         if status == '1':
@@ -143,6 +161,7 @@ def main():
             rows = cursor.fetchall()  # 读取查询结果,
             rowCount = len(rows)
             # 无群组记录
+
             if rowCount != 0:  # rowCount不为0 说明该用户在该群组之前有记录被删除，将isdel置0#
                 sql = "UPDATE OFW_USER_TAB_ALLOWED SET IsDelete =0 WHERE MemberCode = %s and GroupID= %s"
                 # sql = "UPDATE OFW_USER_TAB_ALLOWED_TEST SET IsDelete =0 WHERE MemberCode = %s and GroupID= %s"
@@ -171,7 +190,8 @@ def main():
                 if rowCount == 0:
                     with server.auth.sign_in(tableau_auth):
                         # 先查询用户是否存在
-                        all_users, pagination_item = server.users.get()
+                        all_users, pagination_item = server.users.get(request_options)
+                        # print(len(all_users))
                         if workcode in [user.name for user in all_users]:
                             sql = "select * from OFW_USER_TAB_ALLOWED where IsDelete = 0 and MemberCode = %s"
                             cursor.execute(sql, workcode)  # 执行sql语句
@@ -269,21 +289,21 @@ def main():
                     print('完成对 ' + rawdata + " 在群组 " + groupid + " 的删除操作")
                     quitgroupCount += 1
     print('本次从群组移除用户' + str(quitgroupCount) + '人')
-    for userid in tbuser:
-        # 判断是否为非城建用户
-        if userid[1] not in SystemUser:
-            sql = "select * from DW_HR_MEMBER where MemberMsgCode = %s AND snapdate = CONVERT(DATE,GETDATE(),110)"
-            cursor.execute(sql, userid[1])  # 执行sql语句
-            row = cursor.fetchall()  # 读取查询结果,
-            rowCount = len(row)
-            # 为0代表用户已离职 从tableau server端删除 计数器+1
-            if rowCount == 0:
-                with server.auth.sign_in(tableau_auth):
-                    server.users.remove(userid[0])
-                    print('员工' + userid[1] + '已离职，从Tableau Server端删除成功')
-                    quitCount = quitCount + 1
+    # for userid in tbuser:
+    #     # 判断是否为非城建用户
+    #     if userid[1] not in SystemUser:
+    #         sql = "select * from DW_HR_MEMBER where MemberMsgCode = %s AND snapdate = CONVERT(DATE,GETDATE(),110)"
+    #         cursor.execute(sql, userid[1])  # 执行sql语句
+    #         row = cursor.fetchall()  # 读取查询结果,
+    #         rowCount = len(row)
+    #         # 为0代表用户已离职 从tableau server端删除 计数器+1
+    #         if rowCount == 0:
+    #             with server.auth.sign_in(tableau_auth):
+    #                 server.users.remove(userid[0])
+    #                 print('员工' + userid[1] + '已离职，从Tableau Server端删除成功')
+    #                 quitCount = quitCount + 1
 
-    print('本次共删除用户' + str(quitCount) + '人')
+    # print('本次共删除用户' + str(quitCount) + '人')
 
     # 统计各群组新增用户
     if addRecord:
